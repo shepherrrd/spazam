@@ -19,7 +19,8 @@ public class ChunkHash
     public Guid Id { get; set; }
     public Guid SongId { get; set; }
     public string Hash { get; set; }
-    public int ChunkIndex { get; set; } // Represents which chunk of the song this is
+    public int ChunkIndex { get; set; }
+    public string KeyPoints { get; set; }
     public Song Song { get; set; }
 }
 
