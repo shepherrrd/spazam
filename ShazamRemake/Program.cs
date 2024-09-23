@@ -32,23 +32,17 @@ app.MapPost("/admin/upload-song", async (IFormFile audioFile, AudioProcessor aud
     if (audioFile == null || audioFile.Length == 0)
         return Results.BadRequest("No audio file provided.");
 
-    // Clear previous chunk hashes from the database
     db.ChunkHashes.ExecuteDelete();
-
-    // Create a temporary file
     var tempFilePath = Path.GetTempFileName();
 
     try
     {
-        // Save the stream to a temporary file
         await using (var fileStream = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
         {
             await audioFile.CopyToAsync(fileStream);
         }
 
         var songId = Guid.NewGuid();
-
-        // Use MediaFoundationReader to read the temporary file
         var chunks = audioProcessor.BreakIntoChunks(tempFilePath, 5);
 
         foreach (var chunk in chunks)
@@ -65,12 +59,11 @@ app.MapPost("/admin/upload-song", async (IFormFile audioFile, AudioProcessor aud
             });
         }
 
-        // Add the song metadata to the database
         db.Songs.Add(new Song
         {
             Id = songId,
             Title = audioFile.FileName,
-            FilePath = "InMemory",  // Indicate the file was processed in-memory
+            FilePath = "InMemory",  
             UploadedAt = DateTime.UtcNow
         });
 
@@ -78,7 +71,6 @@ app.MapPost("/admin/upload-song", async (IFormFile audioFile, AudioProcessor aud
     }
     finally
     {
-        // Ensure the temporary file is deleted after processing
         if (File.Exists(tempFilePath))
         {
             File.Delete(tempFilePath);
