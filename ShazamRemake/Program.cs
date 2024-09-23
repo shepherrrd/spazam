@@ -65,14 +65,18 @@ app.MapPost("/identify-chunk", async (IFormFile audioChunk, AudioProcessor audio
 {
     if (audioChunk == null || audioChunk.Length == 0)
         return Results.BadRequest("No audio chunk provided.");
+    var uploadFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+    if (!Directory.Exists(uploadFolderPath))
+    {
+        Directory.CreateDirectory(uploadFolderPath);
+    }
 
     // Save the chunk and extract key points
-    var filePath = Path.Combine("uploads", audioChunk.FileName);
+    var filePath = Path.Combine(uploadFolderPath, audioChunk.FileName);
     await using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
     {
         await audioChunk.CopyToAsync(stream);
     }
-
     var chunks = audioProcessor.BreakIntoChunks(filePath, 5);
     foreach (var chunk in chunks)
     {

@@ -12,8 +12,8 @@ using ShazamRemake.Data;
 namespace ShazamRemake.Migrations
 {
     [DbContext(typeof(SpazamDbContext))]
-    [Migration("20240923140118_InitialMigration")]
-    partial class InitialMigration
+    [Migration("20240923194241_newmig")]
+    partial class newmig
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -35,6 +35,10 @@ namespace ShazamRemake.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("KeyPoints")
                         .IsRequired()
                         .HasColumnType("text");
 

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ShazamRemake.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialMigration : Migration
+    public partial class newmig : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -32,7 +32,8 @@ namespace ShazamRemake.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     SongId = table.Column<Guid>(type: "uuid", nullable: false),
                     Hash = table.Column<string>(type: "text", nullable: false),
-                    ChunkIndex = table.Column<int>(type: "integer", nullable: false)
+                    ChunkIndex = table.Column<int>(type: "integer", nullable: false),
+                    KeyPoints = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
