@@ -31,32 +31,62 @@ app.MapPost("/admin/upload-song", async (IFormFile audioFile, AudioProcessor aud
 {
     if (audioFile == null || audioFile.Length == 0)
         return Results.BadRequest("No audio file provided.");
-    var filePath = Path.Combine("uploads", audioFile.FileName);
-    await using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
-    {
-        await audioFile.CopyToAsync(stream);
-    }
 
-    var songId = Guid.NewGuid();
-    var chunks = audioProcessor.BreakIntoChunks(filePath, 5); 
-    foreach (var chunk in chunks)
+    // Clear previous chunk hashes from the database
+    db.ChunkHashes.ExecuteDelete();
+
+    // Create a temporary file
+    var tempFilePath = Path.GetTempFileName();
+
+    try
     {
-        var keyPoints = audioProcessor.ExtractKeyPoints(chunk.Data);
-        var hash = audioProcessor.HashKeyPoints(keyPoints);
-        db.ChunkHashes.Add(new ChunkHash
+        // Save the stream to a temporary file
+        await using (var fileStream = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write))
         {
-            Id = Guid.NewGuid(),
-            SongId = songId,
-            Hash = hash,
-            KeyPoints = string.Join(",", keyPoints.Select(kp => $"{kp.Item1}:{kp.Item2}")),
-            ChunkIndex = chunk.Index
+            await audioFile.CopyToAsync(fileStream);
+        }
+
+        var songId = Guid.NewGuid();
+
+        // Use MediaFoundationReader to read the temporary file
+        var chunks = audioProcessor.BreakIntoChunks(tempFilePath, 5);
+
+        foreach (var chunk in chunks)
+        {
+            var keyPoints = audioProcessor.ExtractKeyPoints(chunk.Data);
+            var hash = audioProcessor.HashKeyPoints(keyPoints);
+            db.ChunkHashes.Add(new ChunkHash
+            {
+                Id = Guid.NewGuid(),
+                SongId = songId,
+                Hash = hash,
+                KeyPoints = string.Join(",", keyPoints.Select(kp => $"{kp.Item1}:{kp.Item2}")),
+                ChunkIndex = chunk.Index
+            });
+        }
+
+        // Add the song metadata to the database
+        db.Songs.Add(new Song
+        {
+            Id = songId,
+            Title = audioFile.FileName,
+            FilePath = "InMemory",  // Indicate the file was processed in-memory
+            UploadedAt = DateTime.UtcNow
         });
+
+        await db.SaveChangesAsync();
+    }
+    finally
+    {
+        // Ensure the temporary file is deleted after processing
+        if (File.Exists(tempFilePath))
+        {
+            File.Delete(tempFilePath);
+        }
     }
 
-    db.Songs.Add(new Song { Id = songId, Title = audioFile.FileName, FilePath = filePath, UploadedAt = DateTime.UtcNow });
-    await db.SaveChangesAsync();
+    return Results.Ok(new { status = true, message = "Song processed and chunks stored." });
 
-    return Results.Ok(new { status = "Song uploaded and processed", songId });
 }).DisableAntiforgery().WithName("UploadSong")
 .WithTags("Admin");
 
@@ -65,34 +95,27 @@ app.MapPost("/identify-chunk", async (IFormFile audioChunk, AudioProcessor audio
 {
     if (audioChunk == null || audioChunk.Length == 0)
         return Results.BadRequest("No audio chunk provided.");
-    var uploadFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
-    if (!Directory.Exists(uploadFolderPath))
-    {
-        Directory.CreateDirectory(uploadFolderPath);
-    }
 
-    // Save the chunk and extract key points
-    var filePath = Path.Combine(uploadFolderPath, audioChunk.FileName);
-    await using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+    await using (var memoryStream = new MemoryStream())
     {
-        await audioChunk.CopyToAsync(stream);
-    }
-    var chunks = audioProcessor.BreakIntoChunks(filePath, 5);
-    foreach (var chunk in chunks)
-    {
-        var keyPoints = audioProcessor.ExtractKeyPoints(chunk.Data);
-        var hash = audioProcessor.HashKeyPoints(keyPoints);
-        var match = await db.ChunkHashes
-            .Include(c => c.Song)
-            .FirstOrDefaultAsync(c => c.Hash == hash);
-        if (match != null)
+        await audioChunk.CopyToAsync(memoryStream);
+        memoryStream.Position = 0; 
+        var chunks = audioProcessor.BreakIntoChunks(memoryStream, 5);
+        foreach (var chunk in chunks)
         {
-            return Results.Ok(new { status = true, songdetails = match.Song.Title });
+            var keyPoints = audioProcessor.ExtractKeyPoints(chunk.Data);
+            var hash = audioProcessor.HashKeyPoints(keyPoints);
+            var match = await db.ChunkHashes
+                .Include(c => c.Song)
+                .FirstOrDefaultAsync(c => c.Hash == hash);
+            if (match != null)
+            {
+                return Results.Ok(new { status = true, songdetails = match.Song.Title });
+            }
         }
     }
-    
 
-    return Results.NotFound(new { status = false });
+    return Results.NotFound(new { status = false, message = "No matching song found." });
 }).AllowAnonymous().DisableAntiforgery()
 .WithName("IdentifyChunk")
 .WithTags("Identification");

@@ -4,22 +4,59 @@ using System.Linq;
 
 public class AudioProcessor
 {
-    public List<AudioChunk> BreakIntoChunks(string filePath, int chunkDurationInSeconds)
+    public List<AudioChunk> BreakIntoChunks(Stream audioStream, int chunkDurationInSeconds)
     {
         List<AudioChunk> chunks = new List<AudioChunk>();
 
-        using (var reader = new AudioFileReader(filePath))
+        // Use MediaFoundationReader to read different types of audio files
+        using (var reader = new MediaFoundationReader(""))
         {
-            int totalChunks = (int)(reader.TotalTime.TotalSeconds / chunkDurationInSeconds);
-            for (int i = 0; i < totalChunks; i++)
+            int bytesPerSecond = reader.WaveFormat.AverageBytesPerSecond;
+            int chunkSizeInBytes = bytesPerSecond * chunkDurationInSeconds;
+
+            byte[] buffer = new byte[chunkSizeInBytes];
+            int bytesRead;
+            int index = 0;
+
+            // Read the stream in chunks
+            while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
             {
-                var chunk = ExtractChunk(reader, i, chunkDurationInSeconds);
-                chunks.Add(new AudioChunk { Data = chunk, Index = i });
+                byte[] chunkData = new byte[bytesRead];
+                System.Buffer.BlockCopy(buffer, 0, chunkData, 0, bytesRead);
+
+                chunks.Add(new AudioChunk { Data = chunkData, Index = index++ });
             }
         }
 
         return chunks;
     }
+    public List<AudioChunk> BreakIntoChunks(string filePath, int chunkDurationInSeconds)
+{
+        List<AudioChunk> chunks = new List<AudioChunk>();
+
+        // Use MediaFoundationReader to read different types of audio files
+        using (var reader = new MediaFoundationReader(filePath))
+        {
+            int bytesPerSecond = reader.WaveFormat.AverageBytesPerSecond;
+            int chunkSizeInBytes = bytesPerSecond * chunkDurationInSeconds;
+
+            byte[] buffer = new byte[chunkSizeInBytes];
+            int bytesRead;
+            int index = 0;
+
+            // Read the stream in chunks
+            while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                byte[] chunkData = new byte[bytesRead];
+                System.Buffer.BlockCopy(buffer, 0, chunkData, 0, bytesRead);
+
+                chunks.Add(new AudioChunk { Data = chunkData, Index = index++ });
+            }
+        }
+
+        return chunks;
+    }
+
 
     private byte[] ExtractChunk(AudioFileReader reader, int chunkIndex, int durationInSeconds)
     {
